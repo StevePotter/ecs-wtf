@@ -1,0 +1,13 @@
+name: simple-server
+services:
+  server:
+    build:
+      context: .
+    ports:
+      - "8001:5100"
+    volumes:
+      - ./:/code
+  server_from_dockerhub:
+    image: stevepotterredefine/simple_server:latest
+    ports:
+      - "8002:5100"
