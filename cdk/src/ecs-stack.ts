@@ -1,20 +1,16 @@
-import { CfnOutput, Duration, Stack, StackProps } from 'aws-cdk-lib'
-import { InstanceType, InstanceClass, InstanceSize, Vpc } from 'aws-cdk-lib/aws-ec2'
+import { CfnOutput, Stack, StackProps } from 'aws-cdk-lib'
+import { Vpc } from 'aws-cdk-lib/aws-ec2'
 import {
   Cluster,
   ContainerImage,
-  Ec2Service,
-  Ec2TaskDefinition,
-  EcsOptimizedImage,
-  AmiHardwareType,
+  FargateService,
+  FargateTaskDefinition,
   AwsLogDriver,
   Protocol,
-  AsgCapacityProvider,
 } from 'aws-cdk-lib/aws-ecs'
 import { ManagedPolicy, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam'
 import { Construct } from 'constructs'
 import { ApplicationLoadBalancer, ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2'
-import { AutoScalingGroup, GroupMetrics, HealthCheck } from 'aws-cdk-lib/aws-autoscaling'
 
 export class EcsStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -32,14 +28,6 @@ export class EcsStack extends Stack {
       vpc,
     })
 
-    const autoScalingGroup = new AutoScalingGroup(this, 'AutoScalingGroup', {
-      autoScalingGroupName: id,
-      vpc,
-      instanceType: InstanceType.of(InstanceClass.T3, InstanceSize.SMALL),
-      machineImage: EcsOptimizedImage.amazonLinux2023(AmiHardwareType.STANDARD),
-    })
-    cluster.addAsgCapacityProvider(new AsgCapacityProvider(this, 'AsgCapacityProvider', { autoScalingGroup }))
-
     const logging = new AwsLogDriver({ streamPrefix: id }) 
 
     // Create an IAM Role for ECS tasks
@@ -52,9 +40,10 @@ export class EcsStack extends Stack {
     ecsTaskExecutionRole.addManagedPolicy(ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'))
 
     // Define the ECS Task Definition
-    const taskDefinition = new Ec2TaskDefinition(this, 'TaskDef', {
+    const taskDefinition = new FargateTaskDefinition(this, 'TaskDef', {
       executionRole: ecsTaskExecutionRole,
-      family: id,
+      cpu: 256, // 0.25 vCPU
+      memoryLimitMiB: 512,
     })
 
     const containerPort = 5100
@@ -62,8 +51,6 @@ export class EcsStack extends Stack {
     const container = taskDefinition.addContainer('AppContainer', {
       containerName,
       image: ContainerImage.fromRegistry("stevepotterredefine/simple_server:latest"),      
-      cpu: 256, // 0.25 vCPU
-      memoryLimitMiB: 512,
       logging,
     })
 
@@ -73,7 +60,7 @@ export class EcsStack extends Stack {
     })
 
     // Define the ECS Service
-    const service = new Ec2Service(this, 'EcsService', {
+    const service = new FargateService(this, 'EcsService', {
       cluster,
       taskDefinition,
       serviceName: id,
